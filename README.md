@@ -103,4 +103,4 @@ python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper --debug
 <hr>
 
 <h2>📄 Lisens</h2>
-<p>MIT (eller legg inn ønsket lisens i <code>LICENSE</code>).</p>
+<p>LGPL-3.0</p>
