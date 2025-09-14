@@ -1,5 +1,5 @@
 <h1>Frame Art Uploader 🖼️📺</h1>
-<p>Last opp kunst/bilder til <strong>Samsung The Frame</strong> via kommandolinjen. Støtter enten en lokal bildefil, et tilfeldig <em>Bing Wallpaper</em>, eller et tilfeldig landskapsbilde fra <em>Unsplash</em>. Skriptet beskjærer/tilpasser automatisk til 3840×2160 (4K) før opplasting, og husker tidligere opplastede bilder i <code>uploaded_files.json</code>.</p>
+<p>Last opp kunst/bilder til <strong>Samsung The Frame</strong> via kommandolinjen. Støtter enten en lokal bildefil, et tilfeldig <em>Bing Wallpaper</em>, eller et landskapsbilde fra <em>Unsplash</em> (tilfeldig eller spesifikt). Skriptet beskjærer/tilpasser automatisk til 3840×2160 (4K) før opplasting, og husker tidligere opplastede bilder i <code>uploaded_files.json</code>.</p>
 
 <hr>
 
@@ -8,7 +8,7 @@
   <li>Python 3.9+</li>
   <li>TV og maskin på samme nettverk</li>
   <li>TV-en må støtte og (helst) være i <em>Art Mode</em></li>
-  <li>Unsplash API access key (kun hvis du bruker <code>--unsplash</code>)</li>
+  <li>Unsplash API access key (kun hvis du bruker <code>--unsplash [IMAGE_ID]</code>)</li>
 </ul>
 
 <h2>📦 Installering</h2>
@@ -23,9 +23,9 @@ pip install -r requirements.txt
 <hr>
 
 <h2>▶️ Bruk</h2>
-<p>Kjør skriptet med <code>--tvip</code> og <em>én</em> av kildene <code>--bingwallpaper</code>, <code>--unsplash</code> eller <code>--image &lt;sti&gt;</code>.</p>
+<p>Kjør skriptet med <code>--tvip</code> og <em>én</em> av kildene <code>--bingwallpaper</code>, <code>--unsplash [IMAGE_ID]</code> eller <code>--image &lt;sti&gt;</code>.</p>
 
-<p>For <code>--unsplash</code> trenger du en <em>Unsplash API access key</em>. Sett den i miljøvariabelen <code>UNSPLASH_ACCESS_KEY</code> eller direkte i <code>frame_art_uploader.py</code>.</p>
+<p>For <code>--unsplash [IMAGE_ID]</code> trenger du en <em>Unsplash API access key</em>. Sett den i miljøvariabelen <code>UNSPLASH_ACCESS_KEY</code> eller direkte i <code>frame_art_uploader.py</code>.</p>
 
 <h3>Eksempler</h3>
 <pre><code><h3>1) Bruk et tilfeldig Bing-bakgrunnsbilde på én TV</h3>
@@ -39,10 +39,13 @@ python3 frame_art_uploader.py --tvip 192.168.1.20 --image /path/til/bilde.jpg
 export UNSPLASH_ACCESS_KEY=din_nokkel
 python3 frame_art_uploader.py --tvip 192.168.1.20 --unsplash
 
-<h3>4) Flere TV-er (kommaseparert liste)</h3>
+<h3>4) Bruk et spesifikt Unsplash-bilde via ID</h3>
+python3 frame_art_uploader.py --tvip 192.168.1.20 --unsplash a-body-of-water-surrounded-by-trees-on-a-sunny-day-Pyk2RVJ5fVY
+
+<h3>5) Flere TV-er (kommaseparert liste)</h3>
 python3 frame_art_uploader.py --tvip 192.168.1.20,192.168.1.21 --bingwallpaper
 
-<h3>5) Debug (mer logging)</h3>
+<h3>6) Debug (mer logging)</h3>
 python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper --debug
 </code></pre>
 
@@ -72,10 +75,10 @@ python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper --debug
       <td><code>--bingwallpaper</code></td>
     </tr>
     <tr>
-      <td><code>--unsplash</code></td>
+      <td><code>--unsplash [IMAGE_ID]</code></td>
       <td>Ja* (enten/eller)</td>
-      <td>Bruk et tilfeldig landskapsbilde fra Unsplash (krever UNSPLASH_ACCESS_KEY)</td>
-      <td><code>--unsplash</code></td>
+      <td>Bruk et Unsplash-bilde. Oppgi IMAGE_ID for et spesifikt bilde eller utelat for et tilfeldig landskap (krever UNSPLASH_ACCESS_KEY)</td>
+      <td><code>--unsplash</code> eller <code>--unsplash a-body-of-water-surrounded-by-trees-on-a-sunny-day-Pyk2RVJ5fVY</code></td>
     </tr>
     <tr>
       <td><code>--image &lt;sti&gt;</code></td>

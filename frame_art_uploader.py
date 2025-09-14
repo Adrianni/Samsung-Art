@@ -30,8 +30,14 @@ parser.add_argument('--tvip', required=True,
 source_group = parser.add_mutually_exclusive_group(required=True)
 source_group.add_argument('--bingwallpaper', action='store_true',
                           help='Use a random Bing Wallpaper')
-source_group.add_argument('--unsplash', action='store_true',
-                          help='Use a random Unsplash landscape photo (requires UNSPLASH_ACCESS_KEY)')
+source_group.add_argument(
+    '--unsplash',
+    nargs='?',
+    const=True,
+    metavar='IMAGE_ID',
+    help=('Use an Unsplash photo. Provide IMAGE_ID for a specific photo or leave empty '
+          'for a random landscape (requires UNSPLASH_ACCESS_KEY)')
+)
 source_group.add_argument('--image', type=str,
                           help='Path to a local image that should be uploaded instead of a Bing wallpaper')
 
@@ -132,17 +138,22 @@ def bing_get_image(url: str) -> Tuple[Optional[BytesIO], Optional[str]]:
 # -----------------------------
 # Unsplash (innebygget)
 # -----------------------------
-def unsplash_get_image() -> Tuple[Optional[BytesIO], Optional[str], Optional[str]]:
-    """Fetch a random landscape image from Unsplash using the official API."""
+def unsplash_get_image(image_id: Optional[str] = None) -> Tuple[Optional[BytesIO], Optional[str], Optional[str]]:
+    """Fetch an image from Unsplash. Random if no image_id is provided."""
     if not UNSPLASH_ACCESS_KEY:
         logging.error('Unsplash access key not set. Set UNSPLASH_ACCESS_KEY environment variable.')
         return None, None, None
 
-    api_url = "https://api.unsplash.com/photos/random"
+    if image_id:
+        api_url = f"https://api.unsplash.com/photos/{image_id}"
+        params: Dict[str, str] = {}
+    else:
+        api_url = "https://api.unsplash.com/photos/random"
+        params = {"orientation": "landscape"}
     try:
         resp = requests.get(
             api_url,
-            params={"orientation": "landscape"},
+            params=params,
             headers={"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"},
             timeout=30,
         )
@@ -250,8 +261,9 @@ def get_image_for_tv(tv_ip: Optional[str]):
         image_data, file_type = bing_get_image(image_url)
         if image_data is None:
             return None, None, None, None, None
-    elif args.unsplash:
-        image_data, file_type, image_url = unsplash_get_image()
+    elif args.unsplash is not None:
+        unsplash_id = None if args.unsplash is True else args.unsplash
+        image_data, file_type, image_url = unsplash_get_image(unsplash_id)
         if image_data is None or image_url is None:
             return None, None, None, None, None
         source_name = UNSPLASH_SOURCE_NAME
