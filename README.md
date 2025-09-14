@@ -1,1 +1,127 @@
+<h1>Frame Art Uploader 🖼️📺</h1>
+<p>Last opp kunst/bilder til <strong>Samsung The Frame</strong> via kommandolinjen. Støtter enten en lokal bildefil eller et tilfeldig <em>Bing Wallpaper</em>. Skriptet beskjærer/tilpasser automatisk til 3840×2160 (4K) før opplasting, og husker tidligere opplastede bilder i <code>uploaded_files.json</code>.</p>
+
+<hr>
+
+<h2>🔧 Forutsetninger</h2>
+<ul>
+  <li>Python 3.9+</li>
+  <li>TV og maskin på samme nettverk</li>
+  <li>TV-en må støtte og (helst) være i <em>Art Mode</em></li>
+</ul>
+
+<h2>📦 Installering</h2>
+<pre><code># (valgfritt, anbefalt) virtuelt miljø
+python3 -m venv .venv
+source .venv/bin/activate    # Windows: .venv\Scripts\activate
+
+# Installer avhengigheter
 pip install -r requirements.txt
+</code></pre>
+
+<hr>
+
+<h2>▶️ Bruk</h2>
+<p>Kjør skriptet med <code>--tvip</code> og <em>én</em> av kildene <code>--bingwallpaper</code> eller <code>--image &lt;sti&gt;</code>.</p>
+
+<h3>Eksempler</h3>
+<pre><code><h3>1) Bruk et tilfeldig Bing-bakgrunnsbilde på én TV</h3>
+python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper
+
+<h3>2) Last opp en lokal bildefil</h3>
+python3 frame_art_uploader.py --tvip 192.168.1.20 --image /path/til/bilde.jpg
+
+<h3>3) Flere TV-er (kommaseparert liste)</h3>
+python3 frame_art_uploader.py --tvip 192.168.1.20,192.168.1.21 --bingwallpaper
+
+<h3>4) Samme bilde til alle oppgitte TV-er</h3>
+python3 frame_art_uploader.py --tvip 192.168.1.20,192.168.1.21 --image /path/til/bilde.jpg --same-image
+
+<h3>5) Debug (mer logging) og lagre original/tilpasset bilde til disk</h3>
+python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper --debug --debugimage
+</code></pre>
+
+<hr>
+
+<h2>⚙️ Argumenter</h2>
+<table>
+  <thead>
+    <tr>
+      <th>Flagg</th>
+      <th>Påkrevd</th>
+      <th>Beskrivelse</th>
+      <th>Eksempel</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td><code>--tvip</code></td>
+      <td>Ja</td>
+      <td>IP til én eller flere TV-er (kommaseparert)</td>
+      <td><code>--tvip 192.168.1.20,192.168.1.21</code></td>
+    </tr>
+    <tr>
+      <td><code>--bingwallpaper</code></td>
+      <td>Ja* (enten/eller)</td>
+      <td>Bruk et tilfeldig Bing Wallpaper (hentes via HTTP)</td>
+      <td><code>--bingwallpaper</code></td>
+    </tr>
+    <tr>
+      <td><code>--image &lt;sti&gt;</code></td>
+      <td>Ja* (enten/eller)</td>
+      <td>Bruk en lokal bildefil</td>
+      <td><code>--image /path/til/bilde.jpg</code></td>
+    </tr>
+    <tr>
+      <td><code>--same-image</code></td>
+      <td>Nei</td>
+      <td>Bruk samme bilde på alle oppgitte TV-er</td>
+      <td><code>--same-image</code></td>
+    </tr>
+    <tr>
+      <td><code>--upload-all</code></td>
+      <td>Nei</td>
+      <td>Hvis et bilde allerede er lastet opp, last opp på nytt i stedet for å gjenbruke</td>
+      <td><code>--upload-all</code></td>
+    </tr>
+    <tr>
+      <td><code>--debug</code></td>
+      <td>Nei</td>
+      <td>Aktiver mer detaljert logging (nyttig for feilsøk)</td>
+      <td><code>--debug</code></td>
+    </tr>
+    <tr>
+      <td><code>--debugimage</code></td>
+      <td>Nei</td>
+      <td>Lagre nedlastet og tilpasset bilde til disk for inspeksjon</td>
+      <td><code>--debugimage</code></td>
+    </tr>
+  </tbody>
+</table>
+
+<hr>
+
+<h2>🖼️ Bildetilpasning</h2>
+<ul>
+  <li>Bilder skaleres og midt-beskjæres automatisk til <strong>3840×2160</strong> (JPEG, kvalitet 90).</li>
+  <li>Loddrett/kvadratisk motiv beskjæres i kantene for å passe 16:9 (The Frame).</li>
+</ul>
+
+<hr>
+
+<h2>🧠 Gjenbruk av opplasting</h2>
+<p>Skriptet lagrer metadata i <code>uploaded_files.json</code> for å kunne gjenbruke tidligere opplastede bilder (per kilde, og per TV ved flere TV-er). Bruk <code>--upload-all</code> dersom du vil tvinge ny opplasting.</p>
+
+<hr>
+
+<h2>🧯 Feilsøking</h2>
+<ul>
+  <li><strong>Får ikke kontakt:</strong> Verifiser IP (<code>ping</code>), at TV og maskin er på samme VLAN/subnett, og prøv <code>--debug</code>.</li>
+  <li><strong>Art Mode ikke støttet:</strong> Enkelte modeller/konfigurasjoner støtter ikke opplasting via Art API.</li>
+  <li><strong>Bilde ser “feil beskåret” ut:</strong> Bruk 16:9-kilde (f.eks. 3840×2160) for et perfekt resultat.</li>
+</ul>
+
+<hr>
+
+<h2>📄 Lisens</h2>
+<p>MIT (eller legg inn ønsket lisens i <code>LICENSE</code>).</p>
