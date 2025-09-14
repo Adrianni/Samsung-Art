@@ -34,11 +34,8 @@ python3 frame_art_uploader.py --tvip 192.168.1.20 --image /path/til/bilde.jpg
 <h3>3) Flere TV-er (kommaseparert liste)</h3>
 python3 frame_art_uploader.py --tvip 192.168.1.20,192.168.1.21 --bingwallpaper
 
-<h3>4) Samme bilde til alle oppgitte TV-er</h3>
-python3 frame_art_uploader.py --tvip 192.168.1.20,192.168.1.21 --image /path/til/bilde.jpg --same-image
-
-<h3>5) Debug (mer logging) og lagre original/tilpasset bilde til disk</h3>
-python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper --debug --debugimage
+<h3>4) Debug (mer logging)</h3>
+python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper --debug
 </code></pre>
 
 <hr>
@@ -73,28 +70,10 @@ python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper --debug --debu
       <td><code>--image /path/til/bilde.jpg</code></td>
     </tr>
     <tr>
-      <td><code>--same-image</code></td>
-      <td>Nei</td>
-      <td>Bruk samme bilde på alle oppgitte TV-er</td>
-      <td><code>--same-image</code></td>
-    </tr>
-    <tr>
-      <td><code>--upload-all</code></td>
-      <td>Nei</td>
-      <td>Hvis et bilde allerede er lastet opp, last opp på nytt i stedet for å gjenbruke</td>
-      <td><code>--upload-all</code></td>
-    </tr>
-    <tr>
       <td><code>--debug</code></td>
       <td>Nei</td>
       <td>Aktiver mer detaljert logging (nyttig for feilsøk)</td>
       <td><code>--debug</code></td>
-    </tr>
-    <tr>
-      <td><code>--debugimage</code></td>
-      <td>Nei</td>
-      <td>Lagre nedlastet og tilpasset bilde til disk for inspeksjon</td>
-      <td><code>--debugimage</code></td>
     </tr>
   </tbody>
 </table>
@@ -110,7 +89,7 @@ python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper --debug --debu
 <hr>
 
 <h2>🧠 Gjenbruk av opplasting</h2>
-<p>Skriptet lagrer metadata i <code>uploaded_files.json</code> for å kunne gjenbruke tidligere opplastede bilder (per kilde, og per TV ved flere TV-er). Bruk <code>--upload-all</code> dersom du vil tvinge ny opplasting.</p>
+<p>Skriptet lagrer metadata i <code>uploaded_files.json</code> for å kunne gjenbruke tidligere opplastede bilder (per kilde, og per TV ved flere TV-er).</p>
 
 <hr>
 
