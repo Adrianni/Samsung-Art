@@ -19,16 +19,10 @@ import requests
 # Argumenter
 # -----------------------------
 parser = argparse.ArgumentParser(description='Upload images to Samsung Frame TV from Bing Wallpapers or a local file.')
-parser.add_argument('--upload-all', action='store_true',
-                    help='Upload all images at once (ellers rebruker den eksisterende hvis den finnes).')
 parser.add_argument('--debug', action='store_true',
                     help='Enable debug mode to check if TV is reachable (logger mer).')
 parser.add_argument('--tvip', required=True,
                     help='Comma-separated IP addresses of Samsung Frame TVs')
-parser.add_argument('--same-image', action='store_true',
-                    help='Use the same image for all TVs (default: different images)')
-parser.add_argument('--debugimage', action='store_true',
-                    help='Save downloaded and resized images for inspection')
 
 source_group = parser.add_mutually_exclusive_group(required=True)
 source_group.add_argument('--bingwallpaper', action='store_true',
@@ -134,7 +128,6 @@ def bing_get_image(url: str) -> Tuple[Optional[BytesIO], Optional[str]]:
 # Hovedlogikk
 # -----------------------------
 tvip_list: List[str] = args.tvip.split(',') if args.tvip else []
-use_same_image: bool = args.same_image
 
 if not tvip_list:
     logging.error('No TV IP addresses specified. Please use --tvip')
@@ -143,12 +136,6 @@ if not tvip_list:
 utils = Utils(args.tvip, uploaded_files)
 
 SOURCE_NAME = "bing_wallpaper"
-
-def save_debug_image(image_data: BytesIO, filename: str) -> None:
-    if args.debugimage and image_data is not None:
-        with open(filename, 'wb') as f:
-            f.write(image_data.getvalue())
-        logging.info(f'Debug image saved as {filename}')
 
 def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[str],
                image_url: str, remote_filename: Optional[str], source_name: str) -> None:
@@ -185,9 +172,8 @@ def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[st
         except Exception as e:
             logging.error(f'Error uploading image to TV at {tv_ip}: {e}')
     else:
-        if not args.upload_all:
-            logging.info(f'Setting existing image on TV at {tv_ip}, skipping upload')
-            tv.art().select_image(remote_filename, show=True)
+        logging.info(f'Setting existing image on TV at {tv_ip}, skipping upload')
+        tv.art().select_image(remote_filename, show=True)
 
 def get_image_for_tv(tv_ip: Optional[str]):
     if args.image:
@@ -224,25 +210,14 @@ def get_image_for_tv(tv_ip: Optional[str]):
         logging.error('No image source specified. Use --bingwallpaper or --image.')
         return None, None, None, None, None
 
-    save_debug_image(image_data, f'debug_{source_name}_original.jpg')
-
     logging.info('Resizing and cropping the image (3840x2160)...')
     resized_image_data = utils.resize_and_crop_image(image_data)
-
-    save_debug_image(resized_image_data, f'debug_{source_name}_resized.jpg')
 
     return resized_image_data, file_type, image_url, None, source_name
 
 # -----------------------------
 # Kjøring
 # -----------------------------
-if len(tvip_list) > 1 and use_same_image:
-    # Hent ett bilde og bruk på alle TV-er
-    image_data, file_type, image_url, remote_filename, source_name = get_image_for_tv(None)
-    for ip in tvip_list:
-        process_tv(ip, image_data, file_type, image_url, remote_filename, source_name)
-else:
-    # Eget (tilfeldig) bilde pr. TV
-    for ip in tvip_list:
-        image_data, file_type, image_url, remote_filename, source_name = get_image_for_tv(ip)
-        process_tv(ip, image_data, file_type, image_url, remote_filename, source_name)
+for ip in tvip_list:
+    image_data, file_type, image_url, remote_filename, source_name = get_image_for_tv(ip)
+    process_tv(ip, image_data, file_type, image_url, remote_filename, source_name)
