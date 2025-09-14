@@ -15,10 +15,13 @@ from samsungtvws import SamsungTVWS
 from PIL import Image
 import requests
 
+# Unsplash API access key (set env var UNSPLASH_ACCESS_KEY or edit here)
+UNSPLASH_ACCESS_KEY: str = os.environ.get("UNSPLASH_ACCESS_KEY", "")
+
 # -----------------------------
 # Argumenter
 # -----------------------------
-parser = argparse.ArgumentParser(description='Upload images to Samsung Frame TV from Bing Wallpapers or a local file.')
+parser = argparse.ArgumentParser(description='Upload images to Samsung Frame TV from Bing Wallpapers, Unsplash, or a local file.')
 parser.add_argument('--debug', action='store_true',
                     help='Enable debug mode to check if TV is reachable (logger mer).')
 parser.add_argument('--tvip', required=True,
@@ -27,6 +30,8 @@ parser.add_argument('--tvip', required=True,
 source_group = parser.add_mutually_exclusive_group(required=True)
 source_group.add_argument('--bingwallpaper', action='store_true',
                           help='Use a random Bing Wallpaper')
+source_group.add_argument('--unsplash', action='store_true',
+                          help='Use a random Unsplash landscape photo (requires UNSPLASH_ACCESS_KEY)')
 source_group.add_argument('--image', type=str,
                           help='Path to a local image that should be uploaded instead of a Bing wallpaper')
 
@@ -125,6 +130,44 @@ def bing_get_image(url: str) -> Tuple[Optional[BytesIO], Optional[str]]:
         return None, None
 
 # -----------------------------
+# Unsplash (innebygget)
+# -----------------------------
+def unsplash_get_image() -> Tuple[Optional[BytesIO], Optional[str], Optional[str]]:
+    """Fetch a random landscape image from Unsplash using the official API."""
+    if not UNSPLASH_ACCESS_KEY:
+        logging.error('Unsplash access key not set. Set UNSPLASH_ACCESS_KEY environment variable.')
+        return None, None, None
+
+    api_url = "https://api.unsplash.com/photos/random"
+    try:
+        resp = requests.get(
+            api_url,
+            params={"orientation": "landscape"},
+            headers={"Authorization": f"Client-ID {UNSPLASH_ACCESS_KEY}"},
+            timeout=30,
+        )
+        resp.raise_for_status()
+        data = resp.json()
+
+        image_page = data.get("links", {}).get("html")
+        raw_url = data.get("urls", {}).get("raw")
+        if not raw_url:
+            logging.error('Unsplash response missing image URL')
+            return None, None, None
+
+        download_url = f"{raw_url}&w=3840&h=2160&fit=crop"
+        img_resp = requests.get(download_url, timeout=30)
+        img_resp.raise_for_status()
+        file_type = img_resp.headers.get('Content-Type', '').split('/')[-1].upper() or 'JPEG'
+        return BytesIO(img_resp.content), file_type, image_page or download_url
+    except requests.RequestException as e:
+        logging.error(f"Failed to fetch Unsplash image: {e}")
+        return None, None, None
+    except ValueError as e:
+        logging.error(f"Failed to parse Unsplash response: {e}")
+        return None, None, None
+
+# -----------------------------
 # Hovedlogikk
 # -----------------------------
 tvip_list: List[str] = args.tvip.split(',') if args.tvip else []
@@ -135,7 +178,8 @@ if not tvip_list:
 
 utils = Utils(args.tvip, uploaded_files)
 
-SOURCE_NAME = "bing_wallpaper"
+BING_SOURCE_NAME = "bing_wallpaper"
+UNSPLASH_SOURCE_NAME = "unsplash"
 
 def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[str],
                image_url: str, remote_filename: Optional[str], source_name: str) -> None:
@@ -195,7 +239,7 @@ def get_image_for_tv(tv_ip: Optional[str]):
             return None, None, None, None, None
     elif args.bingwallpaper:
         image_url = bing_get_image_url()
-        source_name = SOURCE_NAME
+        source_name = BING_SOURCE_NAME
         logging.info(f'Selected source: {source_name} -> {image_url}')
 
         remote_filename = utils.get_remote_filename(image_url, source_name, tv_ip)
@@ -206,8 +250,18 @@ def get_image_for_tv(tv_ip: Optional[str]):
         image_data, file_type = bing_get_image(image_url)
         if image_data is None:
             return None, None, None, None, None
+    elif args.unsplash:
+        image_data, file_type, image_url = unsplash_get_image()
+        if image_data is None or image_url is None:
+            return None, None, None, None, None
+        source_name = UNSPLASH_SOURCE_NAME
+        logging.info(f'Selected source: {source_name} -> {image_url}')
+
+        remote_filename = utils.get_remote_filename(image_url, source_name, tv_ip)
+        if remote_filename:
+            return None, None, image_url, remote_filename, source_name
     else:
-        logging.error('No image source specified. Use --bingwallpaper or --image.')
+        logging.error('No image source specified. Use --bingwallpaper, --unsplash or --image.')
         return None, None, None, None, None
 
     logging.info('Resizing and cropping the image (3840x2160)...')
