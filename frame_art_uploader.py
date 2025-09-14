@@ -18,19 +18,23 @@ import requests
 # -----------------------------
 # Argumenter
 # -----------------------------
-parser = argparse.ArgumentParser(description='Upload images to Samsung Frame TV from Bing Wallpapers.')
+parser = argparse.ArgumentParser(description='Upload images to Samsung Frame TV from Bing Wallpapers or a local file.')
 parser.add_argument('--upload-all', action='store_true',
                     help='Upload all images at once (ellers rebruker den eksisterende hvis den finnes).')
 parser.add_argument('--debug', action='store_true',
                     help='Enable debug mode to check if TV is reachable (logger mer).')
-parser.add_argument('--tvip', help='Comma-separated IP addresses of Samsung Frame TVs')
+parser.add_argument('--tvip', required=True,
+                    help='Comma-separated IP addresses of Samsung Frame TVs')
 parser.add_argument('--same-image', action='store_true',
                     help='Use the same image for all TVs (default: different images)')
 parser.add_argument('--debugimage', action='store_true',
                     help='Save downloaded and resized images for inspection')
-# For bakoverkompatibilitet – flagget gjør ikke noe, Bing er eneste kilde uansett:
-parser.add_argument('--bing-wallpapers', action='store_true',
-                    help='(Optional – default) Use Bing Wallpapers')
+
+source_group = parser.add_mutually_exclusive_group(required=True)
+source_group.add_argument('--bingwallpaper', action='store_true',
+                          help='Use a random Bing Wallpaper')
+source_group.add_argument('--image', type=str,
+                          help='Path to a local image that should be uploaded instead of a Bing wallpaper')
 
 args = parser.parse_args()
 
@@ -138,7 +142,7 @@ if not tvip_list:
 
 utils = Utils(args.tvip, uploaded_files)
 
-SOURCE_NAME = "bing_wallpapers"
+SOURCE_NAME = "bing_wallpaper"
 
 def save_debug_image(image_data: BytesIO, filename: str) -> None:
     if args.debugimage and image_data is not None:
@@ -186,28 +190,48 @@ def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[st
             tv.art().select_image(remote_filename, show=True)
 
 def get_image_for_tv(tv_ip: Optional[str]):
-    image_url = bing_get_image_url()
-    logging.info(f'Selected source: {SOURCE_NAME} -> {image_url}')
+    if args.image:
+        image_url = args.image
+        source_name = "local_image"
+        logging.info(f'Selected source: {source_name} -> {image_url}')
 
-    # Hvis vi har lastet opp samme fil tidligere, rebruk remote_filename
-    remote_filename = utils.get_remote_filename(image_url, SOURCE_NAME, tv_ip)
+        remote_filename = utils.get_remote_filename(image_url, source_name, tv_ip)
+        if remote_filename:
+            return None, None, image_url, remote_filename, source_name
 
-    if remote_filename:
-        return None, None, image_url, remote_filename, SOURCE_NAME
+        try:
+            with open(image_url, 'rb') as f:
+                image_data = BytesIO(f.read())
+            ext = os.path.splitext(image_url)[1][1:].lower()
+            file_type = 'JPEG' if ext in ('jpg', 'jpeg') else ext.upper()
+        except Exception as e:
+            logging.error(f'Failed to load image {image_url}: {e}')
+            return None, None, None, None, None
+    elif args.bingwallpaper:
+        image_url = bing_get_image_url()
+        source_name = SOURCE_NAME
+        logging.info(f'Selected source: {source_name} -> {image_url}')
 
-    # Last ned og prosesser bildet
-    image_data, file_type = bing_get_image(image_url)
-    if image_data is None:
+        remote_filename = utils.get_remote_filename(image_url, source_name, tv_ip)
+
+        if remote_filename:
+            return None, None, image_url, remote_filename, source_name
+
+        image_data, file_type = bing_get_image(image_url)
+        if image_data is None:
+            return None, None, None, None, None
+    else:
+        logging.error('No image source specified. Use --bingwallpaper or --image.')
         return None, None, None, None, None
 
-    save_debug_image(image_data, f'debug_{SOURCE_NAME}_original.jpg')
+    save_debug_image(image_data, f'debug_{source_name}_original.jpg')
 
     logging.info('Resizing and cropping the image (3840x2160)...')
     resized_image_data = utils.resize_and_crop_image(image_data)
 
-    save_debug_image(resized_image_data, f'debug_{SOURCE_NAME}_resized.jpg')
+    save_debug_image(resized_image_data, f'debug_{source_name}_resized.jpg')
 
-    return resized_image_data, file_type, image_url, None, SOURCE_NAME
+    return resized_image_data, file_type, image_url, None, source_name
 
 # -----------------------------
 # Kjøring
