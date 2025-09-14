@@ -10,7 +10,7 @@ from typing import Tuple, Optional, List, Dict
 from datetime import datetime, timedelta
 
 # Eksterne pakker som må være installert:
-#   pip install samsungtvws pillow requests
+#   pip3 install -r requirements.txt
 from samsungtvws import SamsungTVWS
 from PIL import Image
 import requests
