@@ -15,6 +15,74 @@ from samsungtvws import SamsungTVWS
 from PIL import Image
 import requests
 
+PHOTO_FILTER_OPTIONS: Dict[str, str] = {
+    "none": "none",
+    "aqua": "aqua",
+    "artdeco": "artdeco",
+    "ink": "ink",
+    "wash": "wash",
+    "pastel": "pastel",
+    "feuve": "feuve",
+}
+
+MATTE_OPTIONS: Dict[str, str] = {
+    "none": "none",
+    "myshelf": "myshelf",
+    "modernthin": "modernthin",
+    "modern": "modern",
+    "modernwide": "modernwide",
+    "flexible": "flexible",
+    "shadowbox": "shadowbox",
+    "panoramic": "panoramic",
+    "triptych": "triptych",
+    "mix": "mix",
+    "squares": "squares",
+}
+
+MATTE_COLOR_OPTIONS: Dict[str, str] = {
+    "black": "black",
+    "neutral": "neutral",
+    "antique": "antique",
+    "warm": "warm",
+    "polar": "polar",
+    "sand": "sand",
+    "seafoam": "seafoam",
+    "sage": "sage",
+    "burgandy": "burgandy",
+    "navy": "navy",
+    "apricot": "apricot",
+    "byzantine": "byzantine",
+    "lavender": "lavender",
+    "redorange": "redorange",
+    "skyblue": "skyblue",
+    "turquoise": "turquoise",
+}
+
+PHOTO_FILTER_DISPLAY = "None|Aqua|ArtDeco|Ink|Wash|Pastel|Feuve"
+MATTE_DISPLAY = "none|myshelf|modernthin|modern|modernwide|flexible|shadowbox|panoramic|triptych|mix|squares"
+MATTE_COLOR_DISPLAY = (
+    "black|neutral|antique|warm|polar|sand|seafoam|sage|burgandy|navy|"
+    "apricot|byzantine|lavender|redorange|skyblue|turquoise"
+)
+
+
+def create_choice_parser(valid_options: Dict[str, str], display: str, argument_name: str):
+    def parser(value: str) -> str:
+        key = value.lower()
+        if key not in valid_options:
+            raise argparse.ArgumentTypeError(
+                f"Invalid {argument_name} '{value}'. Valid options: {display}"
+            )
+        return valid_options[key]
+
+    return parser
+
+
+def build_matte_identifier(matte: str, matte_color: str) -> str:
+    if matte == "none":
+        return "none"
+    return f"{matte}_{matte_color}"
+
 # Unsplash API access key (set env var UNSPLASH_ACCESS_KEY or edit here)
 UNSPLASH_ACCESS_KEY: str = os.environ.get("UNSPLASH_ACCESS_KEY", "")
 
@@ -40,6 +108,31 @@ source_group.add_argument(
 )
 source_group.add_argument('--image', type=str,
                           help='Path to a local image that should be uploaded instead of a Bing wallpaper')
+
+parser.add_argument(
+    '--photo-filter',
+    type=create_choice_parser(PHOTO_FILTER_OPTIONS, PHOTO_FILTER_DISPLAY, "photo filter"),
+    default='none',
+    metavar='FILTER',
+    help=f"Photo filter to apply ({PHOTO_FILTER_DISPLAY}).",
+)
+parser.add_argument(
+    '--matte',
+    type=create_choice_parser(MATTE_OPTIONS, MATTE_DISPLAY, "matte"),
+    default='none',
+    metavar='MATTE',
+    help=f"Matte style to apply ({MATTE_DISPLAY}).",
+)
+parser.add_argument(
+    '--matte-color',
+    type=create_choice_parser(MATTE_COLOR_OPTIONS, MATTE_COLOR_DISPLAY, "matte color"),
+    default='black',
+    metavar='COLOR',
+    help=(
+        "Matte color to apply when a matte is selected "
+        f"({MATTE_COLOR_DISPLAY}). Ignored when matte is 'none'."
+    ),
+)
 
 args = parser.parse_args()
 
@@ -192,12 +285,51 @@ utils = Utils(args.tvip, uploaded_files)
 BING_SOURCE_NAME = "bing_wallpaper"
 UNSPLASH_SOURCE_NAME = "unsplash"
 
+def apply_art_customizations(art_api, tv_ip: str, content_id: str, photo_filter: str, matte_id: str) -> bool:
+    if not content_id:
+        return False
+
+    customization_sent = False
+
+    filter_desc = "no photo filter" if photo_filter == "none" else f"photo filter '{photo_filter}'"
+    try:
+        art_api.set_photo_filter(content_id, photo_filter)
+        logging.info(f"Applied {filter_desc} on TV at {tv_ip}")
+        customization_sent = True
+    except Exception as e:
+        logging.error(f"Failed to set photo filter '{photo_filter}' for TV at {tv_ip}: {e}")
+
+    matte_desc = "no matte" if matte_id == "none" else f"matte '{matte_id}'"
+    try:
+        art_api.change_matte(content_id, matte_id)
+        logging.info(f"Applied {matte_desc} on TV at {tv_ip}")
+        customization_sent = True
+    except Exception as e:
+        logging.error(f"Failed to set matte '{matte_id}' for TV at {tv_ip}: {e}")
+
+    return customization_sent
+
+
+def select_image_with_logging(art_api, tv_ip: str, content_id: str, success_message: str) -> None:
+    if not content_id:
+        logging.error(f"Cannot select artwork on TV at {tv_ip}: missing content id")
+        return
+
+    try:
+        art_api.select_image(content_id, show=True)
+        logging.info(f"{success_message} on TV at {tv_ip}")
+    except Exception as e:
+        logging.error(f"Failed to select image '{content_id}' on TV at {tv_ip}: {e}")
+
+
 def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[str],
-               image_url: str, remote_filename: Optional[str], source_name: str) -> None:
+               image_url: str, remote_filename: Optional[str], source_name: str,
+               photo_filter: str, matte_id: str) -> None:
     tv = SamsungTVWS(tv_ip)
+    art_api = tv.art()
 
     # Sjekk Art Mode-støtte
-    if not tv.art().supported():
+    if not art_api.supported():
         logging.warning(f'TV at {tv_ip} does not support art mode.')
         return
 
@@ -208,12 +340,21 @@ def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[st
 
         try:
             logging.info(f'Uploading image to TV at {tv_ip}')
-            remote_filename = tv.art().upload(image_data.getvalue(), file_type=file_type, matte="none")
+            remote_filename = art_api.upload(image_data.getvalue(), file_type=file_type, matte=matte_id)
             if remote_filename is None:
                 raise RuntimeError('No remote filename returned from TV')
 
-            tv.art().select_image(remote_filename, show=True)
-            logging.info(f'Image uploaded and selected on TV at {tv_ip}')
+            customization_sent = apply_art_customizations(
+                art_api, tv_ip, remote_filename, photo_filter, matte_id
+            )
+
+            success_message = 'Image uploaded and displayed'
+            if customization_sent:
+                success_message = (
+                    'Image uploaded and displayed with updated matte/photo filter'
+                )
+
+            select_image_with_logging(art_api, tv_ip, remote_filename, success_message)
 
             # Logg opplastingen
             uploaded_files.append({
@@ -228,7 +369,15 @@ def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[st
             logging.error(f'Error uploading image to TV at {tv_ip}: {e}')
     else:
         logging.info(f'Setting existing image on TV at {tv_ip}, skipping upload')
-        tv.art().select_image(remote_filename, show=True)
+        customization_sent = apply_art_customizations(
+            art_api, tv_ip, remote_filename, photo_filter, matte_id
+        )
+
+        success_message = 'Existing image selected'
+        if customization_sent:
+            success_message = 'Existing image refreshed with updated matte/photo filter'
+
+        select_image_with_logging(art_api, tv_ip, remote_filename, success_message)
 
 def get_image_for_tv(tv_ip: Optional[str]):
     if args.image:
@@ -284,6 +433,23 @@ def get_image_for_tv(tv_ip: Optional[str]):
 # -----------------------------
 # Kjøring
 # -----------------------------
+selected_photo_filter = args.photo_filter
+selected_matte_identifier = build_matte_identifier(args.matte, args.matte_color)
+
+if args.matte == 'none' and args.matte_color != 'black':
+    logging.info(
+        "Matte color '%s' is ignored because matte is set to 'none'", args.matte_color
+    )
+
 for ip in tvip_list:
     image_data, file_type, image_url, remote_filename, source_name = get_image_for_tv(ip)
-    process_tv(ip, image_data, file_type, image_url, remote_filename, source_name)
+    process_tv(
+        ip,
+        image_data,
+        file_type,
+        image_url,
+        remote_filename,
+        source_name,
+        selected_photo_filter,
+        selected_matte_identifier,
+    )
