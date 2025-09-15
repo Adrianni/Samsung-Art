@@ -1,6 +1,5 @@
 <h1>Frame Art Uploader 🖼️📺</h1>
 <p>Upload art/photos to <strong>Samsung The Frame</strong> from the command line. Supports either a local image file, a random <em>Bing Wallpaper</em>, or a landscape photo from <em>Unsplash</em> (random or specific). The script automatically crops/resizes to 3840×2160 (4K) before uploading and remembers previously uploaded images in <code>uploaded_files.json</code>.</p>
-<p>Optionally apply The Frame's built-in <strong>photo filters</strong>, <strong>matte styles</strong>, and <strong>matte colors</strong> when uploading or reusing artwork.</p>
 Based on <a href="https://github.com/xchwarze/samsung-tv-ws-api">github.com/xchwarze</a>'s work<br>
 <hr>
 
@@ -48,9 +47,6 @@ python3 frame_art_uploader.py --tvip 192.168.1.20,192.168.1.21 --bingwallpaper
 
 <h3>6) Debug (more logging)</h3>
 python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper --debug
-
-<h3>7) Apply a photo filter and matte</h3>
-python3 frame_art_uploader.py --tvip 192.168.1.20 --image /path/to/image.jpg --photo-filter Pastel --matte shadowbox --matte-color polar
 </code></pre>
 
 <hr>
@@ -95,24 +91,6 @@ python3 frame_art_uploader.py --tvip 192.168.1.20 --image /path/to/image.jpg --p
       <td>No</td>
       <td>Enable more detailed logging (useful for troubleshooting)</td>
       <td><code>--debug</code></td>
-    </tr>
-    <tr>
-      <td><code>--photo-filter</code></td>
-      <td>No</td>
-      <td>Apply a built-in Frame photo filter. Valid options: <code>None</code>, <code>Aqua</code>, <code>ArtDeco</code>, <code>Ink</code>, <code>Wash</code>, <code>Pastel</code>, <code>Feuve</code>.</td>
-      <td><code>--photo-filter Pastel</code></td>
-    </tr>
-    <tr>
-      <td><code>--matte</code></td>
-      <td>No</td>
-      <td>Select a matte style. Valid options: <code>none</code>, <code>myshelf</code>, <code>modernthin</code>, <code>modern</code>, <code>modernwide</code>, <code>flexible</code>, <code>shadowbox</code>, <code>panoramic</code>, <code>triptych</code>, <code>mix</code>, <code>squares</code>.</td>
-      <td><code>--matte shadowbox</code></td>
-    </tr>
-    <tr>
-      <td><code>--matte-color</code></td>
-      <td>No</td>
-      <td>Matte color to combine with the selected matte. Valid options: <code>black</code>, <code>neutral</code>, <code>antique</code>, <code>warm</code>, <code>polar</code>, <code>sand</code>, <code>seafoam</code>, <code>sage</code>, <code>burgandy</code>, <code>navy</code>, <code>apricot</code>, <code>byzantine</code>, <code>lavender</code>, <code>redorange</code>, <code>skyblue</code>, <code>turquoise</code>. Ignored when <code>--matte none</code>.</td>
-      <td><code>--matte-color polar</code></td>
     </tr>
   </tbody>
 </table>
