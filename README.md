@@ -1,95 +1,95 @@
 <h1>Frame Art Uploader 🖼️📺</h1>
-<p>Last opp kunst/bilder til <strong>Samsung The Frame</strong> via kommandolinjen. Støtter enten en lokal bildefil, et tilfeldig <em>Bing Wallpaper</em>, eller et landskapsbilde fra <em>Unsplash</em> (tilfeldig eller spesifikt). Skriptet beskjærer/tilpasser automatisk til 3840×2160 (4K) før opplasting, og husker tidligere opplastede bilder i <code>uploaded_files.json</code>.</p>
+<p>Upload art/photos to <strong>Samsung The Frame</strong> from the command line. Supports either a local image file, a random <em>Bing Wallpaper</em>, or a landscape photo from <em>Unsplash</em> (random or specific). The script automatically crops/resizes to 3840×2160 (4K) before uploading and remembers previously uploaded images in <code>uploaded_files.json</code>.</p>
 
 <hr>
 
-<h2>🔧 Forutsetninger</h2>
+<h2>🔧 Prerequisites</h2>
 <ul>
   <li>Python 3.9+</li>
-  <li>TV og maskin på samme nettverk</li>
-  <li>TV-en må støtte og (helst) være i <em>Art Mode</em></li>
-  <li>Unsplash API access key (kun hvis du bruker <code>--unsplash [IMAGE_ID]</code>)</li>
+  <li>The TV and computer on the same network</li>
+  <li>The TV must support and (ideally) be in <em>Art Mode</em></li>
+  <li>Unsplash API access key (only if you use <code>--unsplash [IMAGE_ID]</code>)</li>
 </ul>
 
-<h2>📦 Installering</h2>
-<pre><code># (valgfritt, anbefalt) virtuelt miljø
+<h2>📦 Installation</h2>
+<pre><code># Optional but recommended virtual environment
 python3 -m venv .venv
 source .venv/bin/activate    # Windows: .venv\Scripts\activate
 
-# Installer avhengigheter
+# Install dependencies
 pip install -r requirements.txt
 </code></pre>
 
 <hr>
 
-<h2>▶️ Bruk</h2>
-<p>Kjør skriptet med <code>--tvip</code> og <em>én</em> av kildene <code>--bingwallpaper</code>, <code>--unsplash [IMAGE_ID]</code> eller <code>--image &lt;sti&gt;</code>.</p>
+<h2>▶️ Usage</h2>
+<p>Run the script with <code>--tvip</code> and <em>one</em> of the sources <code>--bingwallpaper</code>, <code>--unsplash [IMAGE_ID]</code>, or <code>--image &lt;path&gt;</code>.</p>
 
-<p>For <code>--unsplash [IMAGE_ID]</code> trenger du en <em>Unsplash API access key</em>. Sett den i miljøvariabelen <code>UNSPLASH_ACCESS_KEY</code> eller direkte i <code>frame_art_uploader.py</code>.</p>
+<p>For <code>--unsplash [IMAGE_ID]</code> you need an <em>Unsplash API access key</em>. Set it in the <code>UNSPLASH_ACCESS_KEY</code> environment variable or directly in <code>frame_art_uploader.py</code>.</p>
 
-<h3>Eksempler</h3>
-<pre><code><h3>1) Bruk et tilfeldig Bing-bakgrunnsbilde på én TV</h3>
+<h3>Examples</h3>
+<pre><code><h3>1) Use a random Bing wallpaper on one TV</h3>
 python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper
 
-<h3>2) Last opp en lokal bildefil</h3>
-python3 frame_art_uploader.py --tvip 192.168.1.20 --image /path/til/bilde.jpg
+<h3>2) Upload a local image file</h3>
+python3 frame_art_uploader.py --tvip 192.168.1.20 --image /path/to/image.jpg
 
-<h3>3) Bruk et tilfeldig Unsplash-landsbilde</h3>
-# forutsetter at UNSPLASH_ACCESS_KEY er satt
-export UNSPLASH_ACCESS_KEY=din_nokkel
+<h3>3) Use a random Unsplash landscape</h3>
+# assumes UNSPLASH_ACCESS_KEY is set
+export UNSPLASH_ACCESS_KEY=your_key
 python3 frame_art_uploader.py --tvip 192.168.1.20 --unsplash
 
-<h3>4) Bruk et spesifikt Unsplash-bilde via ID</h3>
+<h3>4) Use a specific Unsplash image by ID</h3>
 python3 frame_art_uploader.py --tvip 192.168.1.20 --unsplash a-body-of-water-surrounded-by-trees-on-a-sunny-day-Pyk2RVJ5fVY
 
-<h3>5) Flere TV-er (kommaseparert liste)</h3>
+<h3>5) Multiple TVs (comma-separated list)</h3>
 python3 frame_art_uploader.py --tvip 192.168.1.20,192.168.1.21 --bingwallpaper
 
-<h3>6) Debug (mer logging)</h3>
+<h3>6) Debug (more logging)</h3>
 python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper --debug
 </code></pre>
 
 <hr>
 
-<h2>⚙️ Argumenter</h2>
+<h2>⚙️ Arguments</h2>
 <table>
   <thead>
     <tr>
-      <th>Flagg</th>
-      <th>Påkrevd</th>
-      <th>Beskrivelse</th>
-      <th>Eksempel</th>
+      <th>Flag</th>
+      <th>Required</th>
+      <th>Description</th>
+      <th>Example</th>
     </tr>
   </thead>
   <tbody>
     <tr>
       <td><code>--tvip</code></td>
-      <td>Ja</td>
-      <td>IP til én eller flere TV-er (kommaseparert)</td>
+      <td>Yes</td>
+      <td>IP for one or more TVs (comma separated)</td>
       <td><code>--tvip 192.168.1.20,192.168.1.21</code></td>
     </tr>
     <tr>
       <td><code>--bingwallpaper</code></td>
-      <td>Ja* (enten/eller)</td>
-      <td>Bruk et tilfeldig Bing Wallpaper (hentes via HTTP)</td>
+      <td>Yes* (either/or)</td>
+      <td>Use a random Bing Wallpaper (downloaded via HTTP)</td>
       <td><code>--bingwallpaper</code></td>
     </tr>
     <tr>
       <td><code>--unsplash [IMAGE_ID]</code></td>
-      <td>Ja* (enten/eller)</td>
-      <td>Bruk et Unsplash-bilde. Oppgi IMAGE_ID for et spesifikt bilde eller utelat for et tilfeldig landskap (krever UNSPLASH_ACCESS_KEY)</td>
-      <td><code>--unsplash</code> eller <code>--unsplash a-body-of-water-surrounded-by-trees-on-a-sunny-day-Pyk2RVJ5fVY</code></td>
+      <td>Yes* (either/or)</td>
+      <td>Use an Unsplash photo. Provide IMAGE_ID for a specific photo or omit it for a random landscape (requires UNSPLASH_ACCESS_KEY)</td>
+      <td><code>--unsplash</code> or <code>--unsplash a-body-of-water-surrounded-by-trees-on-a-sunny-day-Pyk2RVJ5fVY</code></td>
     </tr>
     <tr>
-      <td><code>--image &lt;sti&gt;</code></td>
-      <td>Ja* (enten/eller)</td>
-      <td>Bruk en lokal bildefil</td>
-      <td><code>--image /path/til/bilde.jpg</code></td>
+      <td><code>--image &lt;path&gt;</code></td>
+      <td>Yes* (either/or)</td>
+      <td>Use a local image file</td>
+      <td><code>--image /path/to/image.jpg</code></td>
     </tr>
     <tr>
       <td><code>--debug</code></td>
-      <td>Nei</td>
-      <td>Aktiver mer detaljert logging (nyttig for feilsøk)</td>
+      <td>No</td>
+      <td>Enable more detailed logging (useful for troubleshooting)</td>
       <td><code>--debug</code></td>
     </tr>
   </tbody>
@@ -97,27 +97,27 @@ python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper --debug
 
 <hr>
 
-<h2>🖼️ Bildetilpasning</h2>
+<h2>🖼️ Image preparation</h2>
 <ul>
-  <li>Bilder skaleres og midt-beskjæres automatisk til <strong>3840×2160</strong> (JPEG, kvalitet 90).</li>
-  <li>Loddrett/kvadratisk motiv beskjæres i kantene for å passe 16:9 (The Frame).</li>
+  <li>Images are automatically scaled and center-cropped to <strong>3840×2160</strong> (JPEG, quality 90).</li>
+  <li>Portrait/square compositions are cropped on the sides to fit 16:9 (The Frame).</li>
 </ul>
 
 <hr>
 
-<h2>🧠 Gjenbruk av opplasting</h2>
-<p>Skriptet lagrer metadata i <code>uploaded_files.json</code> for å kunne gjenbruke tidligere opplastede bilder (per kilde, og per TV ved flere TV-er).</p>
+<h2>🧠 Upload reuse</h2>
+<p>The script stores metadata in <code>uploaded_files.json</code> so it can reuse previously uploaded images (per source, and per TV when multiple TVs are used).</p>
 
 <hr>
 
-<h2>🧯 Feilsøking</h2>
+<h2>🧯 Troubleshooting</h2>
 <ul>
-  <li><strong>Får ikke kontakt:</strong> Verifiser IP (<code>ping</code>), at TV og maskin er på samme VLAN/subnett, og prøv <code>--debug</code>.</li>
-  <li><strong>Art Mode ikke støttet:</strong> Enkelte modeller/konfigurasjoner støtter ikke opplasting via Art API.</li>
-  <li><strong>Bilde ser “feil beskåret” ut:</strong> Bruk 16:9-kilde (f.eks. 3840×2160) for et perfekt resultat.</li>
+  <li><strong>No connection:</strong> Verify the IP (<code>ping</code>), ensure the TV and computer are on the same VLAN/subnet, and try <code>--debug</code>.</li>
+  <li><strong>Art Mode not supported:</strong> Some models/configurations do not support uploads via the Art API.</li>
+  <li><strong>Image looks “incorrectly cropped”:</strong> Use a 16:9 source (e.g., 3840×2160) for perfect framing.</li>
 </ul>
 
 <hr>
 
-<h2>📄 Lisens</h2>
+<h2>📄 License</h2>
 <p>LGPL-3.0</p>
