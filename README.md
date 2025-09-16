@@ -1,7 +1,7 @@
 <h1>Frame Art Uploader 🖼️📺</h1>
 <p>Upload art/photos to <strong>Samsung The Frame</strong> from the command line. Supports either a local image file, a random <em>Bing Wallpaper</em>, artwork from <em>Google Arts &amp; Culture</em> (random or by ID/URL), or a landscape photo from <em>Unsplash</em> (random or specific). The script automatically crops/resizes to 3840×2160 (4K) before uploading and remembers previously uploaded images in <code>uploaded_files.json</code>.</p>
 <p>Optionally apply The Frame's built-in <strong>photo filters</strong>, <strong>matte styles</strong>, and <strong>matte colors</strong> when uploading or reusing artwork.</p>
-Based on <a href="https://github.com/xchwarze/samsung-tv-ws-api">github.com/xchwarze</a>'s work<br>
+Based on <a href="https://github.com/xchwarze/samsung-tv-ws-api">github.com/xchwarze</a>'s work and random Google Arts and Culture based on previous webscraping done by <a href="https://github.com/alejomaar/google-arts-and-culture/">alejomaar</a>.<br>
 <hr>
 
 <h2>🔧 Prerequisites</h2>
