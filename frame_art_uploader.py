@@ -4,6 +4,7 @@ import logging
 import os
 import json
 import argparse
+import csv
 from io import BytesIO
 import random
 import re
@@ -88,9 +89,10 @@ def build_matte_identifier(matte: str, matte_color: str) -> str:
 # Unsplash API access key (set env var UNSPLASH_ACCESS_KEY or edit here)
 UNSPLASH_ACCESS_KEY: str = os.environ.get("UNSPLASH_ACCESS_KEY", "")
 
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 GOOGLE_ARTS_BASE_URL = "https://artsandculture.google.com"
 GOOGLE_ARTS_API_BASE_URL = f"{GOOGLE_ARTS_BASE_URL}/api"
-GOOGLE_ARTS_RANDOM_URL = f"{GOOGLE_ARTS_BASE_URL}/random"
+GOOGLE_ARTS_ASSET_CSV_PATH = os.path.join(BASE_DIR, "assets", "pictures.csv")
 GOOGLE_ARTS_COMMON_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
@@ -115,6 +117,13 @@ GOOGLE_ARTS_IMAGE_HEADERS = {
     **GOOGLE_ARTS_COMMON_HEADERS,
     "Accept": "image/avif,image/webp,image/apng,image/*,*/*;q=0.8",
 }
+
+BING_SOURCE_NAME = "bing_wallpaper"
+UNSPLASH_SOURCE_NAME = "unsplash"
+GOOGLE_ARTS_SOURCE_NAME = "google_arts"
+
+_google_arts_asset_ids_cache: Optional[List[str]] = None
+_used_google_art_asset_ids: Set[str] = set()
 
 # -----------------------------
 # Argumenter
@@ -319,6 +328,90 @@ def google_arts_normalize_art_id(art_id_or_url: str) -> str:
     if match:
         return match.group(1)
     return art_id_or_url
+
+
+def google_arts_load_asset_ids_from_csv(
+    csv_path: str = GOOGLE_ARTS_ASSET_CSV_PATH,
+) -> List[str]:
+    asset_ids: List[str] = []
+    try:
+        with open(csv_path, newline="", encoding="utf-8") as csvfile:
+            reader = csv.reader(csvfile)
+            for row in reader:
+                if not row:
+                    continue
+
+                share_url: Optional[str] = None
+                for value in row:
+                    cleaned = value.strip().strip('"')
+                    if not cleaned or cleaned == "...":
+                        continue
+                    if "artsandculture.google.com/asset" in cleaned:
+                        share_url = cleaned
+                        break
+
+                if not share_url:
+                    continue
+
+                normalized_id = google_arts_normalize_art_id(share_url)
+                if normalized_id and normalized_id not in asset_ids:
+                    asset_ids.append(normalized_id)
+    except FileNotFoundError:
+        logging.error(
+            "Google Arts & Culture CSV file not found at %s", csv_path
+        )
+    except Exception as exc:
+        logging.error(
+            "Failed to read Google Arts & Culture CSV file '%s': %s",
+            csv_path,
+            exc,
+        )
+
+    return asset_ids
+
+
+def google_arts_pick_random_asset_id(
+    excluded_ids: Optional[Set[str]] = None,
+) -> Optional[str]:
+    global _google_arts_asset_ids_cache
+
+    if _google_arts_asset_ids_cache is None:
+        _google_arts_asset_ids_cache = google_arts_load_asset_ids_from_csv()
+
+    asset_ids = _google_arts_asset_ids_cache
+    if not asset_ids:
+        logging.error("Google Arts & Culture asset list from CSV is empty.")
+        return None
+
+    excluded: Set[str] = set(_used_google_art_asset_ids)
+    if excluded_ids:
+        excluded.update(excluded_ids)
+
+    available_ids = [
+        asset_id for asset_id in asset_ids if asset_id and asset_id not in excluded
+    ]
+
+    if not available_ids:
+        logging.info(
+            "All Google Arts & Culture assets from CSV have been used; allowing reuse."
+        )
+        _used_google_art_asset_ids.clear()
+
+        excluded = set(excluded_ids or [])
+        available_ids = [
+            asset_id for asset_id in asset_ids if asset_id and asset_id not in excluded
+        ]
+
+    if not available_ids:
+        logging.info(
+            "All Google Arts & Culture assets from CSV have been previously uploaded; "
+            "selecting from the full list."
+        )
+        available_ids = [asset_id for asset_id in asset_ids if asset_id]
+
+    selected_id = random.choice(available_ids)
+    _used_google_art_asset_ids.add(selected_id)
+    return selected_id
 
 
 def google_arts_normalize_image_url(url: str) -> str:
@@ -526,87 +619,17 @@ def google_arts_fetch_asset_from_page(art_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 
-def google_arts_get_random_asset_id(max_attempts: int = 5) -> Optional[str]:
-    asset_id_pattern = re.compile(r"/asset/(?:[^/]+/)?([A-Za-z0-9_-]+)")
-
-    with requests.Session() as session:
-        session.headers.update(GOOGLE_ARTS_PAGE_HEADERS)
-
-        for attempt in range(max_attempts):
-            response: Optional[requests.Response] = None
-            try:
-                response = session.get(
-                    GOOGLE_ARTS_RANDOM_URL,
-                    timeout=30,
-                    allow_redirects=True,
-                )
-            except requests.HTTPError as e:
-                response = e.response
-                if response is None:
-                    logging.error(
-                        "Failed to request random Google Arts & Culture artwork: %s",
-                        e,
-                    )
-                    continue
-            except requests.RequestException as e:
-                logging.error(
-                    "Failed to request random Google Arts & Culture artwork: %s",
-                    e,
-                )
-                return None
-
-            if response is None:
-                continue
-
-            if response.status_code == 404:
-                logging.debug(
-                    "Google Arts & Culture random endpoint returned 404 on attempt %d; trying to parse response",
-                    attempt + 1,
-                )
-            elif response.status_code >= 400:
-                logging.warning(
-                    "Random Google Arts & Culture request returned HTTP %s on attempt %d",
-                    response.status_code,
-                    attempt + 1,
-                )
-
-            responses_to_scan = [*response.history, response]
-            url_candidates: List[str] = []
-            for resp in responses_to_scan:
-                if resp.url:
-                    url_candidates.append(resp.url)
-                location = resp.headers.get("Location")
-                if location:
-                    url_candidates.append(urljoin(GOOGLE_ARTS_BASE_URL, location))
-
-            for candidate_url in url_candidates:
-                match = asset_id_pattern.search(candidate_url)
-                if match:
-                    return match.group(1)
-
-            for resp in responses_to_scan:
-                try:
-                    body = resp.text
-                except Exception:
-                    body = ""
-                match = asset_id_pattern.search(body or "")
-                if match:
-                    return match.group(1)
-
-            logging.debug(
-                "Random Google Arts & Culture response did not contain an asset id on attempt %d",
-                attempt + 1,
-            )
-
-    logging.error("Unable to determine a random Google Arts & Culture artwork after multiple attempts")
-    return None
-
-
 def google_arts_get_image(art_id: Optional[str] = None) -> Tuple[Optional[BytesIO], Optional[str], Optional[str]]:
     normalized_id = google_arts_normalize_art_id(art_id) if art_id else None
 
     if not normalized_id:
-        normalized_id = google_arts_get_random_asset_id()
+        previously_uploaded_ids = {
+            google_arts_normalize_art_id(entry.get("file", ""))
+            for entry in uploaded_files
+            if entry.get("source") == GOOGLE_ARTS_SOURCE_NAME and entry.get("file")
+        }
+
+        normalized_id = google_arts_pick_random_asset_id(previously_uploaded_ids)
         if not normalized_id:
             return None, None, None
         logging.info("Selected random Google Arts & Culture asset id: %s", normalized_id)
@@ -655,10 +678,6 @@ if not tvip_list:
     sys.exit(1)
 
 utils = Utils(args.tvip, uploaded_files)
-
-BING_SOURCE_NAME = "bing_wallpaper"
-UNSPLASH_SOURCE_NAME = "unsplash"
-GOOGLE_ARTS_SOURCE_NAME = "google_arts"
 
 def apply_art_customizations(art_api, tv_ip: str, content_id: str, photo_filter: str, matte_id: str) -> bool:
     if not content_id:
