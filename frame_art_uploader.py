@@ -6,7 +6,7 @@ import json
 import argparse
 from io import BytesIO
 import random
-from typing import Tuple, Optional, List, Dict
+from typing import Tuple, Optional, List, Dict, Iterable, Union
 from datetime import datetime, timedelta
 
 # Eksterne pakker som må være installert:
@@ -142,9 +142,9 @@ args = parser.parse_args()
 upload_list_path = 'uploaded_files.json'
 if os.path.isfile(upload_list_path):
     with open(upload_list_path, 'r') as f:
-        uploaded_files: List[Dict[str, str]] = json.load(f)
+        uploaded_files: List[Dict[str, Optional[str]]] = json.load(f)
 else:
-    uploaded_files = []
+    uploaded_files: List[Dict[str, Optional[str]]] = []
 
 # -----------------------------
 # Logging
@@ -158,7 +158,7 @@ logging.basicConfig(
 # Utils (innebygget)
 # -----------------------------
 class Utils:
-    def __init__(self, tvips: Optional[str], uploaded_files: List[Dict[str, str]]):
+    def __init__(self, tvips: Optional[str], uploaded_files: List[Dict[str, Optional[str]]]):
         self.tvips = tvips
         self.uploaded_files = uploaded_files
         self.check_tv_ip = len(tvips.split(',')) > 1 if tvips else False  # sjekk tv_ip kun hvis flere TV-er
@@ -193,15 +193,43 @@ class Utils:
             out.seek(0)
             return out
 
-    def get_remote_filename(self, file_name: str, source_name: str, tv_ip: Optional[str]) -> Optional[str]:
+    def get_remote_filename(
+        self,
+        file_name: Union[str, Iterable[str]],
+        source_name: str,
+        tv_ip: Optional[str],
+    ) -> Optional[str]:
         """Finn tidligere opplastet remote_filename for samme kilde/fil (og ev. TV-ip)."""
+
+        if isinstance(file_name, str):
+            candidates: List[str] = [file_name]
+        else:
+            candidates = [name for name in file_name if name]
+
         for uploaded_file in self.uploaded_files:
-            if uploaded_file['file'] == file_name and uploaded_file['source'] == source_name:
-                if self.check_tv_ip:
-                    if uploaded_file.get('tv_ip') == tv_ip:
-                        return uploaded_file['remote_filename']
-                else:
-                    return uploaded_file['remote_filename']
+            if uploaded_file.get('source') != source_name:
+                continue
+
+            if self.check_tv_ip and uploaded_file.get('tv_ip') != tv_ip:
+                continue
+
+            stored_identifiers: List[str] = []
+            stored_file = uploaded_file.get('file')
+            if stored_file:
+                stored_identifiers.append(stored_file)
+
+            display_url = uploaded_file.get('display_url')
+            if display_url:
+                stored_identifiers.append(display_url)
+
+            image_id = uploaded_file.get('image_id')
+            if image_id:
+                stored_identifiers.append(image_id)
+
+            for candidate in candidates:
+                if candidate in stored_identifiers:
+                    return uploaded_file.get('remote_filename')
+
         return None
 
 # -----------------------------
@@ -231,11 +259,13 @@ def bing_get_image(url: str) -> Tuple[Optional[BytesIO], Optional[str]]:
 # -----------------------------
 # Unsplash (innebygget)
 # -----------------------------
-def unsplash_get_image(image_id: Optional[str] = None) -> Tuple[Optional[BytesIO], Optional[str], Optional[str]]:
+def unsplash_get_image(
+    image_id: Optional[str] = None,
+) -> Tuple[Optional[BytesIO], Optional[str], Optional[str], Optional[str]]:
     """Fetch an image from Unsplash. Random if no image_id is provided."""
     if not UNSPLASH_ACCESS_KEY:
         logging.error('Unsplash access key not set. Set UNSPLASH_ACCESS_KEY environment variable.')
-        return None, None, None
+        return None, None, None, None
 
     if image_id:
         api_url = f"https://api.unsplash.com/photos/{image_id}"
@@ -254,22 +284,25 @@ def unsplash_get_image(image_id: Optional[str] = None) -> Tuple[Optional[BytesIO
         data = resp.json()
 
         image_page = data.get("links", {}).get("html")
+        image_identifier = data.get("id")
         raw_url = data.get("urls", {}).get("raw")
         if not raw_url:
             logging.error('Unsplash response missing image URL')
-            return None, None, None
+            return None, None, None, None
 
         download_url = f"{raw_url}&w=3840&h=2160&fit=crop"
         img_resp = requests.get(download_url, timeout=30)
         img_resp.raise_for_status()
         file_type = img_resp.headers.get('Content-Type', '').split('/')[-1].upper() or 'JPEG'
-        return BytesIO(img_resp.content), file_type, image_page or download_url
+        display_url = image_page or download_url
+        identifier = image_identifier or display_url
+        return BytesIO(img_resp.content), file_type, identifier, display_url
     except requests.RequestException as e:
         logging.error(f"Failed to fetch Unsplash image: {e}")
-        return None, None, None
+        return None, None, None, None
     except ValueError as e:
         logging.error(f"Failed to parse Unsplash response: {e}")
-        return None, None, None
+        return None, None, None, None
 
 # -----------------------------
 # Hovedlogikk
@@ -322,9 +355,17 @@ def select_image_with_logging(art_api, tv_ip: str, content_id: str, success_mess
         logging.error(f"Failed to select image '{content_id}' on TV at {tv_ip}: {e}")
 
 
-def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[str],
-               image_url: str, remote_filename: Optional[str], source_name: str,
-               photo_filter: str, matte_id: str) -> None:
+def process_tv(
+    tv_ip: str,
+    image_data: Optional[BytesIO],
+    file_type: Optional[str],
+    image_identifier: Optional[str],
+    display_url: Optional[str],
+    remote_filename: Optional[str],
+    source_name: str,
+    photo_filter: str,
+    matte_id: str,
+) -> None:
     tv = SamsungTVWS(tv_ip)
     art_api = tv.art()
 
@@ -357,14 +398,26 @@ def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[st
             select_image_with_logging(art_api, tv_ip, remote_filename, success_message)
 
             # Logg opplastingen
-            uploaded_files.append({
-                'file': image_url,
-                'remote_filename': remote_filename,
-                'tv_ip': tv_ip if len(tvip_list) > 1 else None,
-                'source': source_name
-            })
-            with open(upload_list_path, 'w') as f:
-                json.dump(uploaded_files, f)
+            if image_identifier is None:
+                logging.warning('Missing image identifier; skipping upload metadata logging.')
+            else:
+                upload_entry: Dict[str, Optional[str]] = {
+                    'file': image_identifier,
+                    'remote_filename': remote_filename,
+                    'tv_ip': tv_ip if len(tvip_list) > 1 else None,
+                    'source': source_name,
+                }
+
+                if display_url and display_url != image_identifier:
+                    upload_entry['display_url'] = display_url
+
+                if source_name == UNSPLASH_SOURCE_NAME:
+                    upload_entry['image_id'] = image_identifier
+
+                uploaded_files.append(upload_entry)
+
+                with open(upload_list_path, 'w') as f:
+                    json.dump(uploaded_files, f)
         except Exception as e:
             logging.error(f'Error uploading image to TV at {tv_ip}: {e}')
     else:
@@ -380,55 +433,70 @@ def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[st
         select_image_with_logging(art_api, tv_ip, remote_filename, success_message)
 
 def get_image_for_tv(tv_ip: Optional[str]):
-    if args.image:
-        image_url = args.image
-        source_name = "local_image"
-        logging.info(f'Selected source: {source_name} -> {image_url}')
+    image_identifier: Optional[str] = None
+    display_url: Optional[str] = None
+    image_data: Optional[BytesIO] = None
+    file_type: Optional[str] = None
+    source_name: Optional[str] = None
 
-        remote_filename = utils.get_remote_filename(image_url, source_name, tv_ip)
+    if args.image:
+        image_path = args.image
+        source_name = "local_image"
+        image_identifier = image_path
+        display_url = image_path
+        logging.info(f'Selected source: {source_name} -> {image_path}')
+
+        remote_filename = utils.get_remote_filename(image_identifier, source_name, tv_ip)
         if remote_filename:
-            return None, None, image_url, remote_filename, source_name
+            return None, None, image_identifier, remote_filename, source_name, display_url
 
         try:
-            with open(image_url, 'rb') as f:
+            with open(image_path, 'rb') as f:
                 image_data = BytesIO(f.read())
-            ext = os.path.splitext(image_url)[1][1:].lower()
+            ext = os.path.splitext(image_path)[1][1:].lower()
             file_type = 'JPEG' if ext in ('jpg', 'jpeg') else ext.upper()
         except Exception as e:
-            logging.error(f'Failed to load image {image_url}: {e}')
-            return None, None, None, None, None
+            logging.error(f'Failed to load image {image_path}: {e}')
+            return None, None, None, None, None, None
     elif args.bingwallpaper:
         image_url = bing_get_image_url()
         source_name = BING_SOURCE_NAME
+        image_identifier = image_url
+        display_url = image_url
         logging.info(f'Selected source: {source_name} -> {image_url}')
 
-        remote_filename = utils.get_remote_filename(image_url, source_name, tv_ip)
+        remote_filename = utils.get_remote_filename(image_identifier, source_name, tv_ip)
 
         if remote_filename:
-            return None, None, image_url, remote_filename, source_name
+            return None, None, image_identifier, remote_filename, source_name, display_url
 
         image_data, file_type = bing_get_image(image_url)
         if image_data is None:
-            return None, None, None, None, None
+            return None, None, None, None, None, None
     elif args.unsplash is not None:
         unsplash_id = None if args.unsplash is True else args.unsplash
-        image_data, file_type, image_url = unsplash_get_image(unsplash_id)
-        if image_data is None or image_url is None:
-            return None, None, None, None, None
+        image_data, file_type, image_identifier, display_url = unsplash_get_image(unsplash_id)
+        if image_data is None or image_identifier is None or display_url is None:
+            return None, None, None, None, None, None
         source_name = UNSPLASH_SOURCE_NAME
-        logging.info(f'Selected source: {source_name} -> {image_url}')
+        logging.info(f'Selected source: {source_name} -> {display_url}')
 
-        remote_filename = utils.get_remote_filename(image_url, source_name, tv_ip)
+        identifier_candidates = [image_identifier, display_url]
+        remote_filename = utils.get_remote_filename(identifier_candidates, source_name, tv_ip)
         if remote_filename:
-            return None, None, image_url, remote_filename, source_name
+            return None, None, image_identifier, remote_filename, source_name, display_url
     else:
         logging.error('No image source specified. Use --bingwallpaper, --unsplash or --image.')
-        return None, None, None, None, None
+        return None, None, None, None, None, None
 
     logging.info('Resizing and cropping the image (3840x2160)...')
     resized_image_data = utils.resize_and_crop_image(image_data)
 
-    return resized_image_data, file_type, image_url, None, source_name
+    if source_name is None or image_identifier is None or display_url is None or file_type is None:
+        logging.error('Missing image metadata after processing; skipping upload.')
+        return None, None, None, None, None, None
+
+    return resized_image_data, file_type, image_identifier, None, source_name, display_url
 
 # -----------------------------
 # Kjøring
@@ -442,12 +510,13 @@ if args.matte == 'none' and args.matte_color != 'black':
     )
 
 for ip in tvip_list:
-    image_data, file_type, image_url, remote_filename, source_name = get_image_for_tv(ip)
+    image_data, file_type, image_identifier, remote_filename, source_name, display_url = get_image_for_tv(ip)
     process_tv(
         ip,
         image_data,
         file_type,
-        image_url,
+        image_identifier,
+        display_url,
         remote_filename,
         source_name,
         selected_photo_filter,
