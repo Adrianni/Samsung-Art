@@ -6,8 +6,10 @@ import json
 import argparse
 from io import BytesIO
 import random
-from typing import Tuple, Optional, List, Dict
+import re
+from typing import Tuple, Optional, List, Dict, Any
 from datetime import datetime, timedelta
+from urllib.parse import urljoin
 
 # Eksterne pakker som må være installert:
 #   pip3 install -r requirements.txt
@@ -86,10 +88,23 @@ def build_matte_identifier(matte: str, matte_color: str) -> str:
 # Unsplash API access key (set env var UNSPLASH_ACCESS_KEY or edit here)
 UNSPLASH_ACCESS_KEY: str = os.environ.get("UNSPLASH_ACCESS_KEY", "")
 
+GOOGLE_ARTS_BASE_URL = "https://artsandculture.google.com"
+GOOGLE_ARTS_API_BASE_URL = f"{GOOGLE_ARTS_BASE_URL}/api"
+GOOGLE_ARTS_RANDOM_URL = f"{GOOGLE_ARTS_BASE_URL}/random"
+GOOGLE_ARTS_HEADERS = {
+    "User-Agent": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    ),
+    "Accept": "application/json, text/plain, */*",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": GOOGLE_ARTS_BASE_URL,
+}
+
 # -----------------------------
 # Argumenter
 # -----------------------------
-parser = argparse.ArgumentParser(description='Upload images to Samsung Frame TV from Bing Wallpapers, Unsplash, or a local file.')
+parser = argparse.ArgumentParser(description='Upload images to Samsung Frame TV from Bing Wallpapers, Google Arts & Culture, Unsplash, or a local file.')
 parser.add_argument('--debug', action='store_true',
                     help='Enable debug mode to check if TV is reachable (logger mer).')
 parser.add_argument('--tvip', required=True,
@@ -108,6 +123,16 @@ source_group.add_argument(
 )
 source_group.add_argument('--image', type=str,
                           help='Path to a local image that should be uploaded instead of a Bing wallpaper')
+source_group.add_argument(
+    '--googleart',
+    nargs='?',
+    const=True,
+    metavar='ART_ID_OR_URL',
+    help=(
+        'Use art from Google Arts & Culture. Provide ART_ID_OR_URL for a specific '
+        'artwork or leave empty for a random piece.'
+    )
+)
 
 parser.add_argument(
     '--photo-filter',
@@ -272,6 +297,150 @@ def unsplash_get_image(image_id: Optional[str] = None) -> Tuple[Optional[BytesIO
         return None, None, None
 
 # -----------------------------
+# Google Arts & Culture (innebygget)
+# -----------------------------
+def google_arts_normalize_art_id(art_id_or_url: str) -> str:
+    match = re.search(r"/asset/(?:[^/]+)/([A-Za-z0-9_-]+)", art_id_or_url)
+    if match:
+        return match.group(1)
+    return art_id_or_url
+
+
+def google_arts_normalize_image_url(url: str) -> str:
+    if "googleusercontent" not in url and "gstatic" not in url:
+        return url
+
+    url = re.sub(
+        r"=s\d+(-[a-z0-9-]+)?",
+        lambda m: "=s0" + (m.group(1) or ""),
+        url,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+    url = re.sub(
+        r"=w\d+-h\d+(-[a-z0-9-]+)?",
+        lambda m: "=w0-h0" + (m.group(1) or ""),
+        url,
+        count=1,
+        flags=re.IGNORECASE,
+    )
+
+    if "=s" not in url and "=w" not in url and "=" not in url.split("?")[0]:
+        separator = "" if url.endswith("=") else "="
+        url = f"{url}{separator}s0"
+    return url
+
+
+def google_arts_find_image_url(data: Any) -> Optional[str]:
+    if isinstance(data, str):
+        if data.startswith("http") and (
+            "googleusercontent" in data or "gstatic" in data
+        ):
+            return data
+    elif isinstance(data, dict):
+        for value in data.values():
+            found = google_arts_find_image_url(value)
+            if found:
+                return found
+    elif isinstance(data, list):
+        for value in data:
+            found = google_arts_find_image_url(value)
+            if found:
+                return found
+    return None
+
+
+def google_arts_fetch_asset(art_id: str) -> Optional[Dict[str, Any]]:
+    try:
+        resp = requests.get(
+            f"{GOOGLE_ARTS_API_BASE_URL}/asset",
+            params={"id": art_id, "hl": "en"},
+            headers=GOOGLE_ARTS_HEADERS,
+            timeout=30,
+        )
+        resp.raise_for_status()
+        return resp.json()
+    except requests.RequestException as e:
+        logging.error(f"Failed to fetch Google Arts & Culture asset '{art_id}': {e}")
+    except ValueError as e:
+        logging.error(f"Failed to parse Google Arts & Culture asset '{art_id}': {e}")
+    return None
+
+
+def google_arts_get_random_asset_id(max_attempts: int = 5) -> Optional[str]:
+    asset_id_pattern = re.compile(r"/asset/(?:[^/]+)/([A-Za-z0-9_-]+)")
+
+    for attempt in range(max_attempts):
+        try:
+            resp = requests.get(
+                GOOGLE_ARTS_RANDOM_URL,
+                headers=GOOGLE_ARTS_HEADERS,
+                timeout=30,
+                allow_redirects=True,
+            )
+            resp.raise_for_status()
+        except requests.RequestException as e:
+            logging.error(f"Failed to request random Google Arts & Culture artwork: {e}")
+            return None
+
+        match = asset_id_pattern.search(resp.url)
+        if match:
+            return match.group(1)
+
+        match = asset_id_pattern.search(resp.text)
+        if match:
+            return match.group(1)
+
+        logging.debug(
+            "Random Google Arts & Culture response did not contain an asset id on attempt %d",
+            attempt + 1,
+        )
+
+    logging.error("Unable to determine a random Google Arts & Culture artwork after multiple attempts")
+    return None
+
+
+def google_arts_get_image(art_id: Optional[str] = None) -> Tuple[Optional[BytesIO], Optional[str], Optional[str]]:
+    normalized_id = google_arts_normalize_art_id(art_id) if art_id else None
+
+    if not normalized_id:
+        normalized_id = google_arts_get_random_asset_id()
+        if not normalized_id:
+            return None, None, None
+        logging.info("Selected random Google Arts & Culture asset id: %s", normalized_id)
+
+    asset_data = google_arts_fetch_asset(normalized_id)
+    if not asset_data:
+        return None, None, None
+
+    share_url = asset_data.get("shareUrl") or asset_data.get("targetUrl") or asset_data.get("url")
+    if share_url:
+        share_url = urljoin(GOOGLE_ARTS_BASE_URL, share_url)
+    else:
+        share_url = f"{GOOGLE_ARTS_BASE_URL}/asset/{normalized_id}"
+
+    image_url = google_arts_find_image_url(asset_data.get("image") or asset_data)
+    if not image_url:
+        logging.error("Google Arts & Culture asset '%s' does not include a downloadable image", normalized_id)
+        return None, None, None
+
+    full_res_url = google_arts_normalize_image_url(image_url)
+
+    try:
+        img_resp = requests.get(full_res_url, headers=GOOGLE_ARTS_HEADERS, timeout=30)
+        img_resp.raise_for_status()
+    except requests.RequestException as e:
+        logging.error(
+            "Failed to download Google Arts & Culture image for asset '%s': %s",
+            normalized_id,
+            e,
+        )
+        return None, None, None
+
+    file_type = img_resp.headers.get('Content-Type', '').split('/')[-1].upper() or 'JPEG'
+    return BytesIO(img_resp.content), file_type, share_url
+
+# -----------------------------
 # Hovedlogikk
 # -----------------------------
 tvip_list: List[str] = args.tvip.split(',') if args.tvip else []
@@ -284,6 +453,7 @@ utils = Utils(args.tvip, uploaded_files)
 
 BING_SOURCE_NAME = "bing_wallpaper"
 UNSPLASH_SOURCE_NAME = "unsplash"
+GOOGLE_ARTS_SOURCE_NAME = "google_arts"
 
 def apply_art_customizations(art_api, tv_ip: str, content_id: str, photo_filter: str, matte_id: str) -> bool:
     if not content_id:
@@ -410,6 +580,17 @@ def get_image_for_tv(tv_ip: Optional[str]):
         image_data, file_type = bing_get_image(image_url)
         if image_data is None:
             return None, None, None, None, None
+    elif args.googleart is not None:
+        google_art_input = None if args.googleart is True else args.googleart
+        image_data, file_type, image_url = google_arts_get_image(google_art_input)
+        if image_data is None or image_url is None:
+            return None, None, None, None, None
+        source_name = GOOGLE_ARTS_SOURCE_NAME
+        logging.info(f'Selected source: {source_name} -> {image_url}')
+
+        remote_filename = utils.get_remote_filename(image_url, source_name, tv_ip)
+        if remote_filename:
+            return None, None, image_url, remote_filename, source_name
     elif args.unsplash is not None:
         unsplash_id = None if args.unsplash is True else args.unsplash
         image_data, file_type, image_url = unsplash_get_image(unsplash_id)
@@ -422,7 +603,7 @@ def get_image_for_tv(tv_ip: Optional[str]):
         if remote_filename:
             return None, None, image_url, remote_filename, source_name
     else:
-        logging.error('No image source specified. Use --bingwallpaper, --unsplash or --image.')
+        logging.error('No image source specified. Use --bingwallpaper, --unsplash, --googleart or --image.')
         return None, None, None, None, None
 
     logging.info('Resizing and cropping the image (3840x2160)...')
