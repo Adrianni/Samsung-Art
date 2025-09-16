@@ -182,16 +182,6 @@ parser.add_argument(
         f"({MATTE_COLOR_DISPLAY}). Ignored when matte is 'none'."
     ),
 )
-parser.add_argument(
-    '--max-remote-art',
-    type=int,
-    default=5,
-    metavar='COUNT',
-    help=(
-        "Maximum number of uploaded artworks to keep on each TV "
-        "(set to 0 to keep all uploads)."
-    ),
-)
 
 args = parser.parse_args()
 
@@ -262,40 +252,6 @@ class Utils:
                 else:
                     return uploaded_file['remote_filename']
         return None
-
-    def get_remote_filenames_for_tv(self, tv_ip: Optional[str]) -> Set[str]:
-        """Returner sett med remote_filename-verdier for en gitt TV."""
-        remote_ids: Set[str] = set()
-        for uploaded_file in self.uploaded_files:
-            remote_filename = uploaded_file.get('remote_filename')
-            if not remote_filename:
-                continue
-            if self.check_tv_ip:
-                if uploaded_file.get('tv_ip') == tv_ip:
-                    remote_ids.add(remote_filename)
-            else:
-                remote_ids.add(remote_filename)
-        return remote_ids
-
-    def remove_remote_filenames_for_tv(self, tv_ip: Optional[str], remote_ids: Set[str]) -> bool:
-        """Fjern oppføringer for remote_filename-verdier som er slettet på en gitt TV."""
-        if not remote_ids:
-            return False
-
-        initial_len = len(self.uploaded_files)
-
-        def should_remove(entry: Dict[str, Any]) -> bool:
-            remote_filename = entry.get('remote_filename')
-            if not remote_filename or remote_filename not in remote_ids:
-                return False
-            if self.check_tv_ip:
-                return entry.get('tv_ip') == tv_ip
-            return True
-
-        self.uploaded_files[:] = [
-            entry for entry in self.uploaded_files if not should_remove(entry)
-        ]
-        return len(self.uploaded_files) != initial_len
 
 # -----------------------------
 # Bing Wallpapers (innebygget)
@@ -760,236 +716,9 @@ def select_image_with_logging(art_api, tv_ip: str, content_id: str, success_mess
         logging.error(f"Failed to select image '{content_id}' on TV at {tv_ip}: {e}")
 
 
-def _normalize_content_items(response: Any) -> List[Dict[str, Any]]:
-    if response is None:
-        return []
-
-    if isinstance(response, list):
-        return [item for item in response if isinstance(item, dict)]
-
-    if isinstance(response, dict):
-        for key in (
-            "content_list",
-            "contentList",
-            "list",
-            "items",
-            "content",
-            "contents",
-            "data",
-        ):
-            if key in response:
-                nested_items = _normalize_content_items(response[key])
-                if nested_items:
-                    return nested_items
-
-        aggregated: List[Dict[str, Any]] = []
-        for value in response.values():
-            nested_items = _normalize_content_items(value)
-            if nested_items:
-                aggregated.extend(nested_items)
-        return aggregated
-
-    if isinstance(response, str):
-        try:
-            return _normalize_content_items(json.loads(response))
-        except ValueError:
-            return []
-
-    return []
-
-
-def _extract_content_id(item: Dict[str, Any]) -> Optional[str]:
-    for key in ("content_id", "contentId", "id", "contentid"):
-        if key not in item:
-            continue
-        value = item[key]
-        if isinstance(value, str):
-            if value.strip():
-                return value.strip()
-        elif value is not None:
-            return str(value)
-    return None
-
-
-def _parse_art_datetime(value: Any) -> Optional[datetime]:
-    if value is None:
-        return None
-
-    if isinstance(value, dict):
-        for nested_key in ("value", "text", "timestamp"):
-            if nested_key in value:
-                parsed = _parse_art_datetime(value[nested_key])
-                if parsed:
-                    return parsed
-        return None
-
-    if isinstance(value, (int, float)):
-        try:
-            timestamp = float(value)
-            if timestamp > 1e12:
-                timestamp /= 1000.0
-            return datetime.fromtimestamp(timestamp)
-        except (ValueError, OSError):
-            return None
-
-    if isinstance(value, str):
-        text = value.strip()
-        if not text:
-            return None
-
-        datetime_formats = (
-            "%Y:%m:%d %H:%M:%S",
-            "%Y-%m-%d %H:%M:%S",
-            "%Y%m%d%H%M%S",
-            "%Y%m%dT%H%M%S",
-            "%Y-%m-%dT%H:%M:%S",
-            "%Y-%m-%dT%H:%M:%SZ",
-        )
-
-        for fmt in datetime_formats:
-            try:
-                return datetime.strptime(text, fmt)
-            except ValueError:
-                continue
-
-        if text.isdigit():
-            try:
-                timestamp = int(text)
-                if len(text) > 10:
-                    timestamp = timestamp / (10 ** (len(text) - 10))
-                return datetime.fromtimestamp(timestamp)
-            except (ValueError, OSError):
-                return None
-
-    return None
-
-
-def _extract_art_item_datetime(item: Dict[str, Any]) -> Optional[datetime]:
-    for key in (
-        "image_date",
-        "imageDate",
-        "registered_date",
-        "registeredDate",
-        "reg_dt",
-        "created_at",
-        "createdAt",
-        "date",
-    ):
-        if key in item:
-            parsed = _parse_art_datetime(item[key])
-            if parsed:
-                return parsed
-
-    return None
-
-
-def prune_remote_artwork(art_api, tv_ip: str, max_items_to_keep: int,
-                         utils_obj: Utils, protected_content_id: Optional[str]) -> Set[str]:
-    if max_items_to_keep <= 0:
-        return set()
-
-    known_remote_ids = utils_obj.get_remote_filenames_for_tv(tv_ip)
-    if protected_content_id:
-        known_remote_ids.add(protected_content_id)
-
-    if not known_remote_ids:
-        logging.debug('No tracked uploads for TV at %s, skipping pruning', tv_ip)
-        return set()
-
-    categories_to_try: Tuple[Optional[str], ...] = (
-        None,
-        "myphoto",
-        "my_photos",
-        "favorites",
-        "favorite",
-        "downloads",
-        "downloaded",
-    )
-
-    collected_items: Dict[str, Dict[str, Any]] = {}
-
-    for category in categories_to_try:
-        try:
-            response = art_api.available(category=category)
-        except Exception as exc:
-            logging.debug(
-                "Failed to fetch art content list for category '%s' on %s: %s",
-                category,
-                tv_ip,
-                exc,
-            )
-            continue
-
-        for item in _normalize_content_items(response):
-            content_id = _extract_content_id(item)
-            if not content_id or content_id not in known_remote_ids:
-                continue
-            if content_id not in collected_items:
-                collected_items[content_id] = item
-
-        if len(collected_items) == len(known_remote_ids):
-            break
-
-    if not collected_items:
-        logging.debug(
-            'No matching uploaded artwork found on TV at %s when pruning', tv_ip
-        )
-        return set()
-
-    items_with_dates: List[Tuple[datetime, str]] = []
-    for content_id, item in collected_items.items():
-        timestamp = _extract_art_item_datetime(item) or datetime.min
-        items_with_dates.append((timestamp, content_id))
-
-    if len(items_with_dates) <= max_items_to_keep:
-        return set()
-
-    items_with_dates.sort(key=lambda pair: (pair[0], pair[1]))
-
-    ids_to_delete: List[str] = []
-    for timestamp, content_id in items_with_dates:
-        remaining = len(items_with_dates) - len(ids_to_delete)
-        if remaining <= max_items_to_keep:
-            break
-        if protected_content_id and content_id == protected_content_id:
-            continue
-        ids_to_delete.append(content_id)
-
-    if len(items_with_dates) - len(ids_to_delete) > max_items_to_keep:
-        logging.debug(
-            "Unable to prune artwork on TV at %s without removing protected item '%s'",
-            tv_ip,
-            protected_content_id,
-        )
-        return set()
-
-    if not ids_to_delete:
-        return set()
-
-    try:
-        art_api.delete_list(ids_to_delete)
-        logging.info(
-            'Deleted %d oldest uploaded artwork(s) from TV at %s',
-            len(ids_to_delete),
-            tv_ip,
-        )
-        logging.debug(
-            'Deleted artwork ids on %s: %s', tv_ip, ', '.join(ids_to_delete)
-        )
-    except Exception as exc:
-        logging.error(
-            'Failed to delete old uploaded artwork on TV at %s: %s',
-            tv_ip,
-            exc,
-        )
-        return set()
-
-    return set(ids_to_delete)
-
-
 def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[str],
                image_url: str, remote_filename: Optional[str], source_name: str,
-               photo_filter: str, matte_id: str, max_art_images: int) -> None:
+               photo_filter: str, matte_id: str) -> None:
     tv = SamsungTVWS(tv_ip)
     art_api = tv.art()
 
@@ -998,9 +727,6 @@ def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[st
         logging.warning(f'TV at {tv_ip} does not support art mode.')
         return
 
-    metadata_changed = False
-    protected_remote_id = remote_filename
-
     if remote_filename is None:
         if image_data is None or file_type is None:
             logging.error(f'No image to upload for TV {tv_ip}.')
@@ -1008,13 +734,9 @@ def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[st
 
         try:
             logging.info(f'Uploading image to TV at {tv_ip}')
-            remote_filename = art_api.upload(
-                image_data.getvalue(), file_type=file_type, matte=matte_id
-            )
+            remote_filename = art_api.upload(image_data.getvalue(), file_type=file_type, matte=matte_id)
             if remote_filename is None:
                 raise RuntimeError('No remote filename returned from TV')
-
-            protected_remote_id = remote_filename
 
             customization_sent = apply_art_customizations(
                 art_api, tv_ip, remote_filename, photo_filter, matte_id
@@ -1035,7 +757,8 @@ def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[st
                 'tv_ip': tv_ip if len(tvip_list) > 1 else None,
                 'source': source_name
             })
-            metadata_changed = True
+            with open(upload_list_path, 'w') as f:
+                json.dump(uploaded_files, f)
         except Exception as e:
             logging.error(f'Error uploading image to TV at {tv_ip}: {e}')
     else:
@@ -1049,22 +772,6 @@ def process_tv(tv_ip: str, image_data: Optional[BytesIO], file_type: Optional[st
             success_message = 'Existing image refreshed with updated matte/photo filter'
 
         select_image_with_logging(art_api, tv_ip, remote_filename, success_message)
-
-    deleted_remote_ids = prune_remote_artwork(
-        art_api,
-        tv_ip,
-        max_art_images,
-        utils,
-        protected_remote_id,
-    )
-
-    if deleted_remote_ids:
-        if utils.remove_remote_filenames_for_tv(tv_ip, deleted_remote_ids):
-            metadata_changed = True
-
-    if metadata_changed:
-        with open(upload_list_path, 'w') as f:
-            json.dump(uploaded_files, f)
 
 def get_image_for_tv(tv_ip: Optional[str]):
     if args.image:
@@ -1150,5 +857,4 @@ for ip in tvip_list:
         source_name,
         selected_photo_filter,
         selected_matte_identifier,
-        args.max_remote_art,
     )
