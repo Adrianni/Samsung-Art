@@ -1,5 +1,5 @@
 <h1>Frame Art Uploader 🖼️📺</h1>
-<p>Upload art/photos to <strong>Samsung The Frame</strong> from the command line. Supports either a local image file, a random <em>Bing Wallpaper</em>, an artwork from <em>Google Arts &amp; Culture</em> (by asset ID), or a landscape photo from <em>Unsplash</em> (random or specific). The script automatically crops/resizes to 3840×2160 (4K) before uploading and remembers previously uploaded images in <code>uploaded_files.json</code>.</p>
+<p>Upload art/photos to <strong>Samsung The Frame</strong> from the command line. Supports either a local image file, a random <em>Bing Wallpaper</em>, or a landscape photo from <em>Unsplash</em> (random or specific). The script automatically crops/resizes to 3840×2160 (4K) before uploading and remembers previously uploaded images in <code>uploaded_files.json</code>.</p>
 <p>Optionally apply The Frame's built-in <strong>photo filters</strong>, <strong>matte styles</strong>, and <strong>matte colors</strong> when uploading or reusing artwork.</p>
 Based on <a href="https://github.com/xchwarze/samsung-tv-ws-api">github.com/xchwarze</a>'s work and random Google Arts and Culture based on previous webscraping done by <a href="https://github.com/alejomaar/google-arts-and-culture/">alejomaar</a>.<br>
 <hr>
@@ -24,11 +24,9 @@ pip install -r requirements.txt
 <hr>
 
 <h2>▶️ Usage</h2>
-<p>Run the script with <code>--tvip</code> and <em>one</em> of the sources <code>--bingwallpaper</code>, <code>--googleart ASSET_ID</code>, <code>--unsplash [IMAGE_ID]</code>, or <code>--image &lt;path&gt;</code>.</p>
+<p>Run the script with <code>--tvip</code> and <em>one</em> of the sources <code>--bingwallpaper</code>, <code>--unsplash [IMAGE_ID]</code>, or <code>--image &lt;path&gt;</code>.</p>
 
 <p>For <code>--unsplash [IMAGE_ID]</code> you need an <em>Unsplash API access key</em>. Set it in the <code>UNSPLASH_ACCESS_KEY</code> environment variable or directly in <code>frame_art_uploader.py</code>.</p>
-
-<p>For <code>--googleart ASSET_ID</code> provide the unique ID shown at the end of the artwork URL on Google Arts &amp; Culture (for example, <code>KwF-AdF1REQl6w</code>).</p>
 
 <h3>Examples</h3>
 <pre><code><h3>1) Use a random Bing wallpaper on one TV</h3>
@@ -37,24 +35,21 @@ python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper
 <h3>2) Upload a local image file</h3>
 python3 frame_art_uploader.py --tvip 192.168.1.20 --image /path/to/image.jpg
 
-<h3>3) Use a Google Arts &amp; Culture asset</h3>
-python3 frame_art_uploader.py --tvip 192.168.1.20 --googleart KwF-AdF1REQl6w
-
-<h3>4) Use a random Unsplash landscape</h3>
+<h3>3) Use a random Unsplash landscape</h3>
 # assumes UNSPLASH_ACCESS_KEY is set
 export UNSPLASH_ACCESS_KEY=your_key
 python3 frame_art_uploader.py --tvip 192.168.1.20 --unsplash
 
-<h3>5) Use a specific Unsplash image by ID</h3>
+<h3>4) Use a specific Unsplash image by ID</h3>
 python3 frame_art_uploader.py --tvip 192.168.1.20 --unsplash a-body-of-water-surrounded-by-trees-on-a-sunny-day-Pyk2RVJ5fVY
 
-<h3>6) Multiple TVs (comma-separated list)</h3>
+<h3>5) Multiple TVs (comma-separated list)</h3>
 python3 frame_art_uploader.py --tvip 192.168.1.20,192.168.1.21 --bingwallpaper
 
-<h3>7) Debug (more logging)</h3>
+<h3>6) Debug (more logging)</h3>
 python3 frame_art_uploader.py --tvip 192.168.1.20 --bingwallpaper --debug
 
-<h3>8) Apply a photo filter and matte</h3>
+<h3>7) Apply a photo filter and matte</h3>
 python3 frame_art_uploader.py --tvip 192.168.1.20 --image /path/to/image.jpg --photo-filter Pastel --matte shadowbox --matte-color polar
 </code></pre>
 
@@ -84,12 +79,6 @@ python3 frame_art_uploader.py --tvip 192.168.1.20 --image /path/to/image.jpg --p
       <td>Yes* (either/or)</td>
       <td>Use a random Bing Wallpaper (downloaded via HTTP)</td>
       <td><code>--bingwallpaper</code></td>
-    </tr>
-    <tr>
-      <td><code>--googleart ASSET_ID</code></td>
-      <td>Yes* (either/or)</td>
-      <td>Use a Google Arts &amp; Culture artwork by asset ID (the final part of the artwork URL).</td>
-      <td><code>--googleart KwF-AdF1REQl6w</code></td>
     </tr>
     <tr>
       <td><code>--unsplash [IMAGE_ID]</code></td>
